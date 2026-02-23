@@ -1,0 +1,6 @@
+---
+# 공통 변수 (필요 시 오버라이드)
+# ansible_user, ansible_ssh_private_key_file 등은 inventory 또는 환경변수로 설정 권장
+
+# OS 패키지 관리자 (AlmaLinux 9 기준)
+package_manager: dnf

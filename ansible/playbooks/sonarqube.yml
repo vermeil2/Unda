@@ -1,0 +1,6 @@
+---
+- name: Install SonarQube (Docker Compose) on target host(s)
+  hosts: ci_servers
+  roles:
+    - role: sonarqube
+      tags: sonarqube

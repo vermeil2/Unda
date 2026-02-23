@@ -1,0 +1,5 @@
+---
+# Jenkins 역할 기본 변수 (참고: Continous-integration/Jenkins/)
+jenkins_repo_url: "https://pkg.jenkins.io/rpm-stable/jenkins.repo"
+jenkins_port: 8080
+java_package: "java-21-openjdk"

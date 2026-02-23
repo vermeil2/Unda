@@ -1,0 +1,14 @@
+---
+# Harbor 역할 기본 변수 (참고: Continous-integration/Harbor/)
+harbor_dir: "{{ lookup('env', 'HOME') }}/harbor"
+harbor_version: "v2.11.0"
+harbor_download_url: "https://github.com/goharbor/harbor/releases/download/{{ harbor_version }}/harbor-online-installer.tgz"
+harbor_domain: "{{ ansible_host | default(inventory_hostname) }}"
+harbor_ip: "{{ ansible_host | default(inventory_hostname) }}"
+cert_dir: "/data/cert"
+harbor_install_with_trivy: true
+
+# 인증서 생성 시 사용 (선택)
+harbor_cert_country: "KR"
+harbor_cert_state: "Incheon"
+harbor_cert_org: "DevOps"

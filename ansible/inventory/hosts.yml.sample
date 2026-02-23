@@ -1,0 +1,21 @@
+# IDP 프로비저닝용 인벤토리 예시
+# 복사 후 hosts.yml 로 저장하고, IP·변수를 환경에 맞게 수정하세요.
+# ansible_ssh_private_key_file 등은 환경 변수나 group_vars에서 설정 가능
+
+all:
+  children:
+    ci_servers:
+      hosts:
+        # vm_jenkins:
+        #   ansible_host: 192.168.1.10
+        # vm_nexus:
+        #   ansible_host: 192.168.1.11
+        # vm_harbor:
+        #   ansible_host: 192.168.1.12
+        # vm_sonar:
+        #   ansible_host: 192.168.1.13
+        localhost:
+          ansible_connection: local
+      vars:
+        ansible_user: "{{ lookup('env', 'ANSIBLE_USER') | default('root', true) }}"
+        # ansible_ssh_private_key_file: "{{ lookup('env', 'ANSIBLE_SSH_KEY_PATH') }}"

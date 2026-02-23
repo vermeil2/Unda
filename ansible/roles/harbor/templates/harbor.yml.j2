@@ -1,0 +1,11 @@
+# Harbor 최소 설정 (Ansible 템플릿)
+# 참고: 설치 패키지 내 harbor.yml.tmpl 에서 더 많은 옵션 확인 가능
+hostname: {{ harbor_domain }}
+
+http:
+  port: 80
+
+https:
+  port: 443
+  certificate: {{ cert_dir }}/{{ harbor_domain }}.crt
+  private_key: {{ cert_dir }}/{{ harbor_domain }}.key

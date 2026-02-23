@@ -1,0 +1,46 @@
+---
+# Jenkins 설치 (실습 순서: jenkins-install.sh → jenkins-firewall-init.sh → start-jenkins.sh)
+
+- name: Ensure Jenkins repo is present
+  ansible.builtin.get_url:
+    url: "{{ jenkins_repo_url }}"
+    dest: /etc/yum.repos.d/jenkins.repo
+    mode: "0644"
+  register: jenkins_repo
+
+- name: Import Jenkins repo GPG key (RPM)
+  ansible.builtin.rpm_key:
+    key: "https://pkg.jenkins.io/rpm-stable/jenkins.io-2023.key"
+    state: present
+
+- name: Ensure system packages and Jenkins dependencies are installed
+  ansible.builtin.dnf:
+    name:
+      - fontconfig
+      - "{{ java_package }}"
+      - jenkins
+    state: present
+  notify: systemd daemon reload
+
+- name: Open Jenkins port in firewalld
+  ansible.builtin.shell: |
+    firewall-cmd --permanent --add-port={{ jenkins_port }}/tcp
+    firewall-cmd --reload
+  when: ansible_facts.services['firewalld.service'] is defined and ansible_facts.services['firewalld.service'].state == 'running'
+  changed_when: false
+  ignore_errors: true
+
+- name: Enable and start Jenkins service
+  ansible.builtin.systemd:
+    name: jenkins
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Display initial admin password path
+  ansible.builtin.debug:
+    msg: |
+      Jenkins 설치가 완료되었습니다.
+      웹 URL: http://{{ ansible_host | default(inventory_hostname) }}:{{ jenkins_port }}
+      초기 관리자 비밀번호: sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+  run_once: true

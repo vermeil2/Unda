@@ -1,0 +1,6 @@
+---
+# SonarQube Docker Compose 역할 (참고: Continous-integration/SonarQube/docker-compose.yml)
+sonarqube_deploy_dir: "/opt/sonarqube"
+sonarqube_port: 9000
+# 프로덕션에서는 변수로 오버라이드 권장
+sonarqube_db_password: "sonar"

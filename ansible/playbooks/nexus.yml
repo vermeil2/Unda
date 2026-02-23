@@ -1,0 +1,6 @@
+---
+- name: Install Nexus 3 on target host(s)
+  hosts: ci_servers
+  roles:
+    - role: nexus
+      tags: nexus

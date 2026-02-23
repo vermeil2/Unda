@@ -1,0 +1,119 @@
+---
+- name: Check if Nexus is already installed
+  ansible.builtin.stat:
+    path: "{{ nexus_home }}/bin/nexus"
+  register: nexus_installed_check
+
+- name: Ensure dependencies (wget, tar, Java) are installed
+  ansible.builtin.dnf:
+    name:
+      - wget
+      - tar
+      - "{{ java_package }}"
+    state: present
+
+- name: Ensure Nexus user exists
+  ansible.builtin.user:
+    name: "{{ nexus_user }}"
+    home: "{{ install_dir }}/nexus"
+    shell: /bin/bash
+    create_home: true
+    system: true
+
+- name: Ensure Sonatype work directory exists
+  ansible.builtin.file:
+    path: "{{ work_dir }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_user }}"
+
+- name: Download Nexus archive
+  ansible.builtin.get_url:
+    url: "{{ nexus_download_url }}"
+    dest: /tmp/nexus.tar.gz
+    mode: "0644"
+  when: not nexus_installed_check.stat.exists
+
+- name: Extract Nexus archive to install_dir
+  ansible.builtin.unarchive:
+    src: /tmp/nexus.tar.gz
+    dest: "{{ install_dir }}"
+    remote_src: true
+  when: not nexus_installed_check.stat.exists
+
+- name: Find extracted Nexus directory
+  ansible.builtin.shell: ls -1d {{ install_dir }}/nexus-3* 2>/dev/null | head -1
+  register: nexus_extracted
+  changed_when: false
+  when: not nexus_installed_check.stat.exists
+
+- name: Move extracted Nexus to nexus-app
+  ansible.builtin.command: mv {{ nexus_extracted.stdout }} {{ nexus_home }}
+  when:
+    - not nexus_installed_check.stat.exists
+    - nexus_extracted.stdout | length > 0
+    - nexus_extracted.rc == 0
+
+- name: Set ownership of Nexus home and work dir
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ nexus_user }}"
+    group: "{{ nexus_user }}"
+    recurse: true
+  loop:
+    - "{{ nexus_home }}"
+    - "{{ work_dir }}"
+  when: nexus_installed_check.stat.exists or (nexus_extracted is defined and nexus_extracted.stdout | length > 0)
+
+- name: Configure run_as_user in nexus.rc
+  ansible.builtin.lineinfile:
+    path: "{{ nexus_home }}/bin/nexus.rc"
+    regexp: '^#?run_as_user='
+    line: 'run_as_user="{{ nexus_user }}"'
+    create: true
+
+- name: Install Nexus systemd unit
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Nexus service
+      After=network.target
+
+      [Service]
+      Type=forking
+      LimitNOFILE=65536
+      User={{ nexus_user }}
+      Group={{ nexus_user }}
+      ExecStart={{ nexus_home }}/bin/nexus start
+      ExecStop={{ nexus_home }}/bin/nexus stop
+      Restart=on-abort
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/nexus.service
+    mode: "0644"
+  notify: systemd daemon reload
+
+- name: Open Nexus port in firewalld
+  ansible.builtin.shell: |
+    firewall-cmd --permanent --add-port={{ nexus_port }}/tcp
+    firewall-cmd --reload
+  when: ansible_facts.services['firewalld.service'] is defined and ansible_facts.services['firewalld.service'].state == 'running'
+  changed_when: false
+  ignore_errors: true
+
+- name: Enable and start Nexus service
+  ansible.builtin.systemd:
+    name: nexus
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Display Nexus completion message
+  ansible.builtin.debug:
+    msg: |
+      Nexus 설치가 완료되었습니다.
+      URL: http://{{ ansible_host | default(inventory_hostname) }}:{{ nexus_port }}
+      초기 비밀번호: cat {{ work_dir }}/nexus3/admin.password
+  run_once: true

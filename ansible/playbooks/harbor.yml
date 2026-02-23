@@ -1,0 +1,6 @@
+---
+- name: Install Harbor on target host(s)
+  hosts: ci_servers
+  roles:
+    - role: harbor
+      tags: harbor

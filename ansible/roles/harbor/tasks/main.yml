@@ -1,0 +1,139 @@
+---
+# Harbor 설치 (실습 순서: harbor-cert.sh → harbor-install-online.sh)
+# 사전 조건: Docker, Docker Compose 설치됨
+
+- name: Ensure Docker and Docker Compose are installed
+  ansible.builtin.dnf:
+    name:
+      - docker
+      - docker-compose-plugin
+    state: present
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+
+- name: Ensure Docker is started and enabled
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Ensure cert and Harbor directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ cert_dir }}"
+    - "{{ harbor_dir }}"
+
+- name: Check if Harbor cert already exists
+  ansible.builtin.stat:
+    path: "{{ cert_dir }}/{{ harbor_domain }}.crt"
+  register: harbor_cert_stat
+
+- name: Generate CA key (self-signed)
+  ansible.builtin.shell: |
+    openssl genrsa -out {{ cert_dir }}/ca.key 4096
+  when: not harbor_cert_stat.stat.exists
+
+- name: Generate CA certificate
+  ansible.builtin.shell: |
+    openssl req -x509 -new -nodes -sha512 -days 3650 \
+      -subj "/C={{ harbor_cert_country }}/ST={{ harbor_cert_state }}/O={{ harbor_cert_org }}/CN={{ harbor_domain }}-CA" \
+      -key {{ cert_dir }}/ca.key \
+      -out {{ cert_dir }}/ca.crt
+  when: not harbor_cert_stat.stat.exists
+
+- name: Generate server key
+  ansible.builtin.shell: |
+    openssl genrsa -out {{ cert_dir }}/{{ harbor_domain }}.key 4096
+  when: not harbor_cert_stat.stat.exists
+
+- name: Generate server CSR
+  ansible.builtin.shell: |
+    openssl req -sha512 -new \
+      -subj "/C={{ harbor_cert_country }}/ST={{ harbor_cert_state }}/O={{ harbor_cert_org }}/CN={{ harbor_domain }}" \
+      -key {{ cert_dir }}/{{ harbor_domain }}.key \
+      -out {{ cert_dir }}/{{ harbor_domain }}.csr
+  when: not harbor_cert_stat.stat.exists
+
+- name: Create v3.ext for SAN
+  ansible.builtin.copy:
+    content: |
+      authorityKeyIdentifier=keyid,issuer
+      basicConstraints=CA:FALSE
+      keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+      extendedKeyUsage = serverAuth
+      subjectAltName = DNS:{{ harbor_domain }},IP:{{ harbor_ip }}
+    dest: "{{ cert_dir }}/v3.ext"
+  when: not harbor_cert_stat.stat.exists
+
+- name: Sign server certificate with CA
+  ansible.builtin.shell: |
+    openssl x509 -req -sha512 -days 3650 \
+      -extfile {{ cert_dir }}/v3.ext \
+      -CA {{ cert_dir }}/ca.crt -CAkey {{ cert_dir }}/ca.key -CAcreateserial \
+      -in {{ cert_dir }}/{{ harbor_domain }}.csr \
+      -out {{ cert_dir }}/{{ harbor_domain }}.crt
+  when: not harbor_cert_stat.stat.exists
+
+- name: Ensure Docker certs.d directory for Harbor domain
+  ansible.builtin.file:
+    path: "/etc/docker/certs.d/{{ harbor_domain }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy CA cert to Docker certs.d
+  ansible.builtin.copy:
+    src: "{{ cert_dir }}/ca.crt"
+    dest: "/etc/docker/certs.d/{{ harbor_domain }}/ca.crt"
+    mode: "0644"
+  notify: Restart Docker
+
+- name: Add Harbor to /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ harbor_ip }} {{ harbor_domain }}"
+    state: present
+  when: harbor_ip != 'localhost' and harbor_domain != 'localhost'
+
+- name: Download Harbor online installer
+  ansible.builtin.get_url:
+    url: "{{ harbor_download_url }}"
+    dest: "{{ harbor_dir }}/harbor-online-installer.tgz"
+    mode: "0644"
+  register: harbor_download
+
+- name: Extract Harbor installer (strip-components=1)
+  ansible.builtin.shell: |
+    cd {{ harbor_dir }}
+    tar xzf harbor-online-installer.tgz --strip-components=1
+  args:
+    creates: "{{ harbor_dir }}/install.sh"
+
+- name: Deploy harbor.yml from template
+  ansible.builtin.template:
+    src: harbor.yml.j2
+    dest: "{{ harbor_dir }}/harbor.yml"
+    mode: "0644"
+
+- name: Check if Harbor is already installed
+  ansible.builtin.stat:
+    path: "{{ harbor_dir }}/docker-compose.yml"
+  register: harbor_installed_check
+
+- name: Run Harbor install.sh (with-trivy)
+  ansible.builtin.shell: |
+    cd {{ harbor_dir }}
+    ./install.sh --with-trivy
+  args:
+    creates: "{{ harbor_dir }}/docker-compose.yml"
+  when: not harbor_installed_check.stat.exists
+
+- name: Display Harbor completion message
+  ansible.builtin.debug:
+    msg: |
+      Harbor 설치가 완료되었습니다.
+      URL: https://{{ harbor_domain }}
+      인증서 경로: {{ cert_dir }}
+  run_once: true

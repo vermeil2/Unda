@@ -1,0 +1,6 @@
+---
+- name: Install Jenkins on target host(s)
+  hosts: ci_servers
+  roles:
+    - role: jenkins
+      tags: jenkins
