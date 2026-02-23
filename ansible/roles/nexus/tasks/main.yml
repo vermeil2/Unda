@@ -95,19 +95,25 @@
     mode: "0644"
   notify: systemd daemon reload
 
-# firewalld가 설치되어 있으면 기동 후 포트 오픈 (AlmaLinux 등에서 서비스명이 firewalld 또는 firewalld.service 일 수 있음)
+# firewalld: facts.services 키가 OS마다 달라서, firewall-cmd 실행 파일 존재 여부로 판단
+- name: Check if firewall-cmd is available
+  ansible.builtin.command: which firewall-cmd
+  register: firewall_cmd_check
+  changed_when: false
+  failed_when: false
+
 - name: Ensure firewalld is running (if installed)
   ansible.builtin.systemd:
     name: firewalld
     state: started
-  when: (ansible_facts.services | default({}))['firewalld.service'] is defined or (ansible_facts.services | default({}))['firewalld'] is defined
+  when: firewall_cmd_check.rc == 0
   ignore_errors: true
 
 - name: Open Nexus port in firewalld
   ansible.builtin.shell: |
     firewall-cmd --permanent --add-port={{ nexus_port }}/tcp
     firewall-cmd --reload
-  when: (ansible_facts.services | default({}))['firewalld.service'] is defined or (ansible_facts.services | default({}))['firewalld'] is defined
+  when: firewall_cmd_check.rc == 0
   changed_when: false
   ignore_errors: true
 
