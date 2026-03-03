@@ -285,6 +285,7 @@ async function createVm(payload: {
   ip: string;
   initialPassword: string;
   name: string;
+  username: string;
 }): Promise<Vm> {
   const res = await fetch('/api/v1/vms', {
     method: 'POST',
@@ -375,21 +376,28 @@ function VmManagementSection({
   vms: Vm[];
   loading: boolean;
   onReload: () => void;
-  onCreateVm: (payload: { ip: string; initialPassword: string; name: string }) => Promise<void>;
+  onCreateVm: (payload: {
+    ip: string;
+    initialPassword: string;
+    name: string;
+    username: string;
+  }) => Promise<void>;
 }) {
   const [ip, setIp] = useState('');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [pw, setPw] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ip || !pw) return;
+    if (!ip || !pw || !username) return;
     try {
       setSubmitting(true);
-      await onCreateVm({ ip, initialPassword: pw, name: name || ip });
+      await onCreateVm({ ip, initialPassword: pw, name: name || ip, username });
       setIp('');
       setName('');
+      setUsername('');
       setPw('');
       await onReload();
     } catch (err) {
@@ -439,6 +447,22 @@ function VmManagementSection({
                   padding: '0.45rem 0.6rem',
                   fontSize: '0.8rem',
                 }}
+              />
+            </label>
+            <label style={{ fontSize: '0.8rem' }}>
+              <span style={{ display: 'block', marginBottom: '0.15rem' }}>Username</span>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="예: ubuntu, ec2-user 등"
+                style={{
+                  width: '100%',
+                  borderRadius: '0.5rem',
+                  border: '1px solid rgba(148,163,184,0.8)',
+                  padding: '0.45rem 0.6rem',
+                  fontSize: '0.8rem',
+                }}
+                required
               />
             </label>
             <label style={{ fontSize: '0.8rem' }}>
@@ -1051,6 +1075,7 @@ const App: React.FC = () => {
     ip: string;
     initialPassword: string;
     name: string;
+    username: string;
   }) => {
     const vm = await createVm(payload);
     setVms((prev) => [vm, ...prev]);
