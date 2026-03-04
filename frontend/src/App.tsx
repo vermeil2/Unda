@@ -292,9 +292,20 @@ async function createJob(tool: CiTool, targetHost: string): Promise<Job> {
   };
 }
 
-// VM API는 아직 백엔드가 없으므로, 초기 버전에서는 빈 배열/로컬 상태만 사용한다.
 async function fetchVms(): Promise<Vm[]> {
-  return [];
+  const res = await fetch('/api/v1/infra/vms');
+  if (!res.ok) {
+    throw new Error('VM 목록을 불러오지 못했습니다.');
+  }
+
+  const data = await res.json();
+  return (data as any[]).map((v) => ({
+    id: v.id,
+    name: v.name ?? v.ip,
+    ip: v.ip,
+    sshConnected: v.ssh_connected,
+    lastCheck: v.last_check,
+  }));
 }
 
 async function createVm(_: {
@@ -303,7 +314,37 @@ async function createVm(_: {
   name: string;
   username: string;
 }): Promise<Vm> {
-  throw new Error('VM API는 아직 구현되지 않았습니다.');
+  const res = await fetch('/api/v1/infra/vms/onboard', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ip: _.ip,
+      username: _.username,
+      initial_password: _.initialPassword,
+      host_alias: _.name || _.ip,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || 'VM 온보딩에 실패했습니다.');
+  }
+
+  const data = await res.json();
+
+  if (!data.reachable) {
+    throw new Error(data.message || 'SSH 연결에 실패했습니다.');
+  }
+
+  const now = new Date().toISOString();
+
+  return {
+    id: data.inventory_host,
+    name: _.name || data.inventory_host,
+    ip: _.ip,
+    sshConnected: true,
+    lastCheck: now,
+  };
 }
 
 // 현재 백엔드는 전체 로그 텍스트를 반환하므로, polling 방식으로 구현
@@ -406,7 +447,6 @@ function VmManagementSection({
       setName('');
       setUsername('');
       setPw('');
-      await onReload();
     } catch (err) {
       alert((err as Error).message);
     } finally {

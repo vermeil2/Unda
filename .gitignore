@@ -1,1 +1,26 @@
 .cursor
+
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Backend data & logs
+backend/.data/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+
+# OS / editor junk
+.DS_Store
+*.swp
+*.swo
+
+.data/
+
+ansible/inventory/hosts.yml
