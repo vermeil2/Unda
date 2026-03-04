@@ -257,57 +257,64 @@ async function fetchJobs(): Promise<Job[]> {
   if (!res.ok) {
     throw new Error('작업 목록을 불러오지 못했습니다.');
   }
-  return res.json();
+  const data = await res.json();
+  // 백엔드 JobResponse -> 프론트 Job 매핑
+  return (data as any[]).map((j) => ({
+    id: j.id,
+    tool: j.tool,
+    targetHost: j.target_host,
+    createdAt: j.requested_at,
+    updatedAt: j.finished_at ?? j.started_at ?? j.requested_at,
+    status: j.status,
+    message: j.error_summary ?? '',
+  }));
 }
 
 async function createJob(tool: CiTool, targetHost: string): Promise<Job> {
-  const res = await fetch(`/api/v1/tools/${tool}/jobs`, {
+  const res = await fetch(`/api/v1/provision/${tool}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetHost }),
+    body: JSON.stringify({ target_host: targetHost, options: {} }),
   });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || '작업 생성에 실패했습니다.');
   }
-  return res.json();
+  const j = await res.json();
+  return {
+    id: j.id,
+    tool: j.tool,
+    targetHost: j.target_host,
+    createdAt: j.requested_at,
+    updatedAt: j.finished_at ?? j.started_at ?? j.requested_at,
+    status: j.status,
+    message: j.error_summary ?? '',
+  };
 }
 
+// VM API는 아직 백엔드가 없으므로, 초기 버전에서는 빈 배열/로컬 상태만 사용한다.
 async function fetchVms(): Promise<Vm[]> {
-  const res = await fetch('/api/v1/vms');
-  if (!res.ok) {
-    throw new Error('VM 목록을 불러오지 못했습니다.');
-  }
-  return res.json();
+  return [];
 }
 
-async function createVm(payload: {
+async function createVm(_: {
   ip: string;
   initialPassword: string;
   name: string;
   username: string;
 }): Promise<Vm> {
-  const res = await fetch('/api/v1/vms', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || '서버 추가에 실패했습니다.');
-  }
-  return res.json();
+  throw new Error('VM API는 아직 구현되지 않았습니다.');
 }
 
-function subscribeJobLogs(jobId: string, onLine: (line: string) => void) {
-  const es = new EventSource(`/api/v1/jobs/${jobId}/logs`);
-  es.onmessage = (event) => {
-    onLine(event.data);
-  };
-  es.onerror = () => {
-    es.close();
-  };
-  return () => es.close();
+// 현재 백엔드는 전체 로그 텍스트를 반환하므로, polling 방식으로 구현
+async function fetchJobLogs(jobId: string): Promise<string[]> {
+  const res = await fetch(`/api/v1/jobs/${jobId}/logs`);
+  if (!res.ok) {
+    return [];
+  }
+  const data = await res.json();
+  const content: string = data.content ?? '';
+  return content.split('\n').filter((line) => line.trim().length > 0);
 }
 
 // === 상단 네비게이션 ===
@@ -1041,14 +1048,24 @@ const App: React.FC = () => {
     load();
   }, []);
 
-  // 로그 SSE 구독
+  // 로그 polling
   useEffect(() => {
     if (!activeJob) return;
-    setLogs([]);
-    const unsubscribe = subscribeJobLogs(activeJob.id, (line) =>
-      setLogs((prev) => [...prev, line]),
-    );
-    return unsubscribe;
+    let cancelled = false;
+
+    const loadLogs = async () => {
+      const lines = await fetchJobLogs(activeJob.id);
+      if (!cancelled) {
+        setLogs(lines);
+      }
+    };
+
+    loadLogs();
+    const interval = setInterval(loadLogs, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [activeJob?.id]);
 
   const reloadJobs = async () => {
