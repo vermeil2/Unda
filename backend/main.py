@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import jobs, provision
 from .routers import infra
+from .routers import ssh
 
 
 def create_app() -> FastAPI:
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     app.include_router(provision.router, prefix="/api/v1")
     app.include_router(jobs.router, prefix="/api/v1")
     app.include_router(infra.router, prefix="/api/v1")
+    app.include_router(ssh.router)
 
     return app
 

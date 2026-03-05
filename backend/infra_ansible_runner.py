@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -40,13 +41,19 @@ def run_playbook(
         json.dumps(extra_vars),
     ]
 
+    # ansible.cfg 는 ansible/ 디렉터리 아래에 있기 때문에,
+    # 해당 경로를 ANSIBLE_CONFIG 로 지정하고 cwd 를 ansible_root 로 맞춰준다.
+    env = os.environ.copy()
+    env["ANSIBLE_CONFIG"] = str(settings.ansible_root / "ansible.cfg")
+
     process = subprocess.Popen(
         cmd,
-        cwd=settings.project_root,
+        cwd=str(settings.ansible_root),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        env=env,
     )
 
     assert process.stdout is not None
